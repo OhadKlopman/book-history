@@ -1,0 +1,154 @@
+---
+title: "Worldcat Shehitot Data Cleaning"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+setwd("C:/Users/ohadk/Documents/Book History")
+
+```
+
+
+#### Setup
+```{r}
+library(tidyverse)
+
+## guess which encoding is appropriate
+guess_encoding("worldcat shehitot.csv")
+
+## UTF-8 is the way to go
+
+shehitot <- read_csv(file = "worldcat shehitot.csv",
+                        locale = locale(date_names = "he", encoding = "UTF-8"))
+```
+#### Separating authors into Hebrew and English
+
+```{r, warning = FALSE}
+for (i in 1:nrow(shehitot)) {
+  title <- unlist(str_split(shehitot$Title[i], " "))
+  title <- gsub("[[:punct:]]", "", title)
+  title <- gsub("  ", "", title)
+  index <- grepl("[A-z]", title)
+  map <- data.frame(title, index)
+  map_eng <- filter(map, map$index == TRUE)
+  map_heb <- filter(map, map$index == FALSE)
+  shehitot$eng_title[i] <- paste(map_eng$title, collapse = " ")
+  shehitot$heb_title[i] <- paste(map_heb$title, collapse = " ")
+}
+```
+
+#### Separating authors into Hebrew and English
+
+```{r, warning = FALSE}
+
+for (i in 1:nrow(shehitot)) {
+  author <- unlist(str_split(shehitot$Author[i], " "))
+  author <- gsub("[[:punct:]]", "", author)
+  author <- gsub("  ", " ", author)
+  index <- grepl("[A-z]", author)
+  map <- data.frame(author, index)
+  map_eng <- filter(map, map$index == TRUE)
+  map_heb <- filter(map, map$index == FALSE)
+  shehitot$eng_author[i] <- paste(map_eng$author, collapse = " ")
+  shehitot$heb_author[i] <- paste(map_heb$author, collapse = " ")
+
+}
+```
+
+
+#### Extracting 4-digit years from the publisher
+```{r, warning = FALSE}
+
+## extracting 4-digit number strings into greg_year and 3-digit into heb_year
+shehitot$greg_year <- ifelse(is.na(str_extract(shehitot$Publisher, "[0-9]{4}")), "", 
+                    str_extract(shehitot$Publisher, "[0-9]{4}"))
+shehitot$heb_year <- ifelse(is.na(str_extract(shehitot$Publisher, "\\b[0-9]{3}\\b")), "", 
+                    str_extract(shehitot$Publisher, "\\b[0-9]{3}\\b"))
+
+
+## changing 5000-year data in greg_year to be in heb_year instead
+for(i in 1:nrow(shehitot)) {
+  if(is.na(shehitot$greg_year[i])) {
+    next
+  }
+  if(shehitot$greg_year[i] > 5000) {
+    shehitot$heb_year[i] <- shehitot$greg_year[i]
+    shehitot$greg_year[i] <- ""
+  }
+}
+
+
+## changing 3-digit data in heb_year to be in 5000-format
+for(i in 1:nrow(shehitot)) {
+  ## changing Hebrew years from 3 characters to 4
+  if(is.na(shehitot$heb_year[i])) {
+    next
+  }
+  if(nchar(shehitot$heb_year[i]) == 3) {
+    shehitot$heb_year[i] <- paste0("5", shehitot$heb_year[i])
+  }
+  else {
+    shehitot$heb_year[i] <- shehitot$heb_year[i]
+  }
+}
+
+## converting to number format
+shehitot$greg_year <- as.numeric(shehitot$greg_year)
+shehitot$heb_year <- as.numeric(shehitot$heb_year)
+
+for(i in 1:nrow(shehitot)) {
+  if(is.na(shehitot$greg_year[i]) & !is.na(shehitot$heb_year[i])) {
+    shehitot$greg_year[i] <- shehitot$heb_year[i] - 5000 + 1240
+  }
+  if(is.na(shehitot$heb_year[i]) & !is.na(shehitot$greg_year[i])) {
+    shehitot$heb_year[i] <- shehitot$greg_year[i] + 5000 - 1240
+  }
+}
+```
+
+#### Extracting cities and countries
+```{r, warning = FALSE}
+world_cities <- read.csv("https://pkgstore.datahub.io/core/world-cities/world-cities_csv/data/6cc66692f0e82b18216a48443b6b95da/world-cities_csv.csv")
+heb_cities <- read.csv("C:/Users/ohadk/Documents/Book History/hebrew_cities.csv", encoding = "UTF-8")
+heb_cities <- heb_cities %>%
+  rename(country = X.U.FEFF.country)
+
+for (i in 1:nrow(shehitot)) {
+  publisher <- unlist(str_split(shehitot$Publisher[i], " "))
+  publisher <- gsub("[[:punct:]]", "", publisher)
+  publisher <- gsub("  ", " ", publisher)
+  shehitot$eng_city[i] <- ifelse(length(publisher[publisher %in% world_cities$name]) == 1, 
+                          publisher[publisher %in% world_cities$name],
+                          "")
+  shehitot$eng_country[i] <- ifelse(length(publisher[publisher %in% world_cities$country]) == 1, 
+                          publisher[publisher %in% world_cities$country],
+                          "")
+}
+
+for (i in 1:nrow(shehitot)) {
+  publisher <- unlist(str_split(shehitot$Publisher[i], " "))
+  publisher <- gsub("[[:punct:]]", "", publisher)
+  publisher <- gsub("  ", " ", publisher)
+  shehitot$heb_city[i] <- ifelse(length(publisher[publisher %in% heb_cities$name]) == 1, 
+                          publisher[publisher %in% heb_cities$name],
+                          "")
+  shehitot$heb_country[i] <- ifelse(length(publisher[publisher %in% heb_cities$country]) == 1, 
+                          publisher[publisher %in% heb_cities$country],
+                          "")
+}
+```
+
+#### Write to CSV and replace NAs with empty cells
+```{r, include=FALSE}
+write_csv(shehitot, paste("Worldcat Shehitot Export Cleaned", Sys.Date(), ".csv"), na = "")
+```
+
+
+#### Visualizations
+
+```{r}
+shehitot$greg_year <- as.numeric(shehitot$greg_year)
+ggplot(data = shehitot, mapping = aes(x = greg_year)) + geom_histogram()
+```
+
