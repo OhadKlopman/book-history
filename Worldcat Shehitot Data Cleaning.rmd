@@ -5,12 +5,10 @@ output: word_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-setwd("C:/Users/ohadk/Documents/Book History")
-
 ```
 
 
-#### Setup
+## Setup
 ```{r}
 library(tidyverse)
 
@@ -22,7 +20,7 @@ guess_encoding("worldcat shehitot.csv")
 shehitot <- read_csv(file = "worldcat shehitot.csv",
                         locale = locale(date_names = "he", encoding = "UTF-8"))
 ```
-#### Separating authors into Hebrew and English
+## Separating authors into Hebrew and English
 
 ```{r, warning = FALSE}
 for (i in 1:nrow(shehitot)) {
@@ -38,7 +36,7 @@ for (i in 1:nrow(shehitot)) {
 }
 ```
 
-#### Separating authors into Hebrew and English
+## Separating authors into Hebrew and English
 
 ```{r, warning = FALSE}
 
@@ -52,12 +50,11 @@ for (i in 1:nrow(shehitot)) {
   map_heb <- filter(map, map$index == FALSE)
   shehitot$eng_author[i] <- paste(map_eng$author, collapse = " ")
   shehitot$heb_author[i] <- paste(map_heb$author, collapse = " ")
-
 }
 ```
 
 
-#### Extracting 4-digit years from the publisher
+## Extracting 4-digit years from the publisher
 ```{r, warning = FALSE}
 
 ## extracting 4-digit number strings into greg_year and 3-digit into heb_year
@@ -107,10 +104,10 @@ for(i in 1:nrow(shehitot)) {
 }
 ```
 
-#### Extracting cities and countries
+## Extracting cities and countries
 ```{r, warning = FALSE}
 world_cities <- read.csv("https://pkgstore.datahub.io/core/world-cities/world-cities_csv/data/6cc66692f0e82b18216a48443b6b95da/world-cities_csv.csv")
-heb_cities <- read.csv("C:/Users/ohadk/Documents/Book History/hebrew_cities.csv", encoding = "UTF-8")
+heb_cities <- read.csv("hebrew_cities.csv", encoding = "UTF-8")
 heb_cities <- heb_cities %>%
   rename(country = X.U.FEFF.country)
 
@@ -139,16 +136,7 @@ for (i in 1:nrow(shehitot)) {
 }
 ```
 
-#### Write to CSV and replace NAs with empty cells
+## Write to CSV and replace NAs with empty cells
 ```{r, include=FALSE}
 write_csv(shehitot, paste("Worldcat Shehitot Export Cleaned", Sys.Date(), ".csv"), na = "")
 ```
-
-
-#### Visualizations
-
-```{r}
-shehitot$greg_year <- as.numeric(shehitot$greg_year)
-ggplot(data = shehitot, mapping = aes(x = greg_year)) + geom_histogram()
-```
-
