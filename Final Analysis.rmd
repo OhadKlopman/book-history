@@ -1,0 +1,136 @@
+---
+title: "Combined Census Data Analysis"
+output:
+  html_document:
+    df_print: paged
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(dedupewider)
+```
+
+```{r, include = FALSE}
+data <- read_csv("Merged Data - Final Cleaned.csv") ## see GitHub repo
+```
+
+## Computing Summary Tables by Author, City, and 
+```{r, include = FALSE}
+## Proportion with Hebrew in the title
+a <- sum(grepl("[\u0590-\u05FF]", data$Title))
+sum(grepl("[\u0590-\u05FF]", data$Title))/nrow(data)
+sum(grepl("[\u0590-\u05FF]", data$Title) & grepl("[A-z]", data$Title))/a
+sum(grepl("[\u0590-\u05FF]", data$Title) & !grepl("[A-z]", data$Title))/a
+sum(grepl("[A-z]", data$Title))/nrow(data)
+
+## Proportion with Weil in the Author
+sum(grepl("Weil", data$Author, ignore.case = T) | grepl("ווייל", data$Author))
+with_weil <- data[grepl("Weil", data$Author, ignore.case = T) | grepl("ווייל", data$Author), ] %>%
+  group_by(`City Cleaned`) %>%
+  summarise("Editions" = n())
+no_weil <- data[!grepl("Weil", data$Author, ignore.case = T) & !grepl("ווייל", data$Author), ] %>%
+  group_by(`City Cleaned`) %>%
+  summarise("Editions" = n())
+
+## Sorting the tables by number of editions and moving NA values to the bottom
+with_weil <- with_weil[order(-with_weil$Editions),]
+with_weil <- na_move(with_weil, direction = "bottom")
+no_weil <- no_weil[order(-no_weil$Editions),]
+no_weil <- na_move(no_weil, direction = "bottom")
+
+## Combining counts of editions by Weil and by other Authors
+editions_by_city <- merge(x = with_weil, y = no_weil,
+                          by.x = "City Cleaned", by.y = "City Cleaned",
+                          all = TRUE) %>%
+  rename("Weil as Author" = Editions.x,
+         "Other Author" = Editions.y)
+
+## Replacing NA counts with 0
+editions_by_city$`Weil as Author`[is.na(editions_by_city$`Weil as Author`)] <- 0
+editions_by_city$`Other Author`[is.na(editions_by_city$`Other Author`)] <- 0
+
+editions_by_city <- editions_by_city[order(-editions_by_city$`Weil as Author`, -editions_by_city$`Other Author`),]
+editions_by_city <- na_move(editions_by_city, direction = "bottom")
+```
+
+## Visualizing the number of editions by decade
+```{r}
+
+ggplot(data = data, mapping = aes(x = Year)) + geom_histogram(binwidth = 10, color = "black", fill = "steelblue") +
+  scale_x_continuous(breaks = seq(from = 1500, to = 1900, by = 20)) +
+  scale_y_continuous(limits = c(0, 10), breaks = seq(from = 0, to = 10, by = 1)) +
+  #theme_classic() + 
+  labs(x = "Year",
+       y = "Count") +
+  theme_classic() +
+  theme(plot.margin = margin(10, 20, 10, 10))
+
+## Only run in order to save the plot to the working directory
+# ggsave("Editions by Year.png", device = "png")
+```
+## Visualizing the distribution of imprint ranges by city
+```{r}
+## Getting range for each city
+range_by_city <- data.frame(city = unique(na.omit(data$`City Cleaned`)),
+                            first = NA,
+                            last = NA,
+                            median = NA)
+
+for (i in seq_along(range_by_city$city)) {
+  subset <- data[data$`City Cleaned` == range_by_city$city[i] & !is.na(data$`City Cleaned`),]
+  range_by_city$first[i] <- min(subset$Year, na.rm = T)
+  range_by_city$last[i] <- max(subset$Year, na.rm = T)
+  range_by_city$median[i] <- median(subset$Year, na.rm = T)
+}
+```
+
+
+``` {r}
+by_city <- merge(x = editions_by_city, y = range_by_city,
+                 by.x = "City Cleaned", by.y = "city",
+                 all = TRUE)
+
+ggplot(data = by_city, mapping = aes(x = first, y = last - first, size = `Weil as Author` + `Other Author`)) + 
+  geom_point(shape = 21, aes(size = `Weil as Author` + `Other Author`), 
+             color = "black", fill = "steelblue", alpha = 0.5,
+             na.rm = T) +
+  labs(x = "Year of First Imprint",
+       y = "Years Between First and Last Imprint",
+       size = "Number of Imprints") +
+  scale_size(range = c(2, 10)) +
+  theme_classic()
+
+ggsave("Range of Publication Years by City.png", )
+
+```
+
+
+```{r}
+range_by_city <- na.omit(range_by_city) %>%
+  rename("Earliest Publication" = first,
+         "Latest Publication" = last,
+         "Median Year of Publication" = median)
+range_by_city <- range_by_city[order(range_by_city$`Earliest Publication`),]
+
+by_city <- merge(x = editions_by_city, y = range_by_city,
+                 by.x = "City Cleaned", by.y = "city",
+                 all = TRUE)
+
+# average number of years between earliest and latest printing
+mean(by_city$`Latest Publication` - by_city$`Earliest Publication`, na.rm = T)
+median(by_city$`Latest Publication` - by_city$`Earliest Publication`, na.rm = T)
+
+multiple_printings <- by_city %>%
+  filter(`Weil as Author` + `Other Author` > 1)
+
+mean(multiple_printings$`Latest Publication` - multiple_printings$`Earliest Publication`, na.rm = T)
+median(multiple_printings$`Latest Publication` - multiple_printings$`Earliest Publication`, na.rm = T)
+which.max(multiple_printings$`Latest Publication` - multiple_printings$`Earliest Publication`)
+
+
+write.csv(range_by_city, file = "clipboard", row.names = FALSE)
+
+```
+
